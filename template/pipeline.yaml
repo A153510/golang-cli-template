@@ -1,0 +1,56 @@
+resources:
+  - repo: self
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+      - feature/*
+
+pool:
+  name: ${{ values.azdoPool }}
+
+variables:
+  - name: GOPROXY
+    value: 'https://$(ARTIFACTORY_USERNAME):$(ARTIFACTORY_TOKEN)@progressive.jfrog.io/artifactory/api/go/pgr-go'
+  - name: HTTPS_PROXY
+    value: 'http://servercache.prci.com:55000'
+
+jobs:
+  - job: build_executable
+    displayName: Build Executable
+    steps:
+      - bash: |
+          podman run --rm \
+          -w /app \
+          -v $(pwd):/app \
+          -e GOPROXY=$(GOPROXY) \
+          -e HTTPS_PROXY=$(HTTPS_PROXY) \
+          clo-base-image-registry.3d.prci.com/golang:latest \
+          env GOOS=windows go build -o ${{ values.cliCommandName }}.exe ./main.go
+        displayName: Build for Windows
+      # - bash: |
+      #     podman run --rm \
+      #     -w /app \
+      #     -v $(pwd):/app \
+      #     -e GOPROXY=$(GOPROXY) \
+      #     -e HTTPS_PROXY=$(HTTPS_PROXY) \
+      #     clo-base-image-registry.3d.prci.com/golang:latest \
+      #     env GOOS=darwin go build -o ${{ values.cliCommandName }} ./main.go
+      #   displayName: Build for Mac OS
+      - bash: |
+          podman run --rm \
+          -w /app \
+          -v $(pwd):/app \
+          -e GOPROXY=$(GOPROXY) \
+          -e HTTPS_PROXY=$(HTTPS_PROXY) \
+          clo-base-image-registry.3d.prci.com/golang:latest \
+          env GOOS=linux go build -o ${{ values.cliCommandName }} ./main.go
+        displayName: Build for Linux
+
+  - job: run_tests
+    displayName: Run Tests
+    steps:
+      - bash: |
+          echo "Run tests here"
+        displayName: Running tests

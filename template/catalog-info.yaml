@@ -1,0 +1,17 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ${{ values.cliCommandName | dump }}
+  {%- if values.description %}
+  description: ${{ values.description | dump }}
+  {%- endif %}
+  tags:
+    - golang
+    - cli
+  links:
+    - title: Cobra Golang Module
+      url: https://pkg.go.dev/github.com/spf13/cobra
+spec:
+  type: application
+  owner: ${{ values.owner | dump }}
+  lifecycle: production

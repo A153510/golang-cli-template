@@ -1,0 +1,149 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+# https://backstage.io/docs/features/software-catalog/descriptor-format#kind-template
+kind: Template
+metadata:
+  name: golang-cli-template-azdo-vm
+  title: Golang CLI App Template AzDO Azure VM
+  description: Creates a Cobra based Golang CLI app. And creates an Azure VM.
+  tags: [
+    'golang'
+  ]
+spec:
+  owner: edcs-babi
+  type: application
+
+  # These parameters are used to generate the input form in the frontend, and are
+  # used to gather input data for the execution of the template.
+  parameters:
+    - title: Application information
+      required:
+        - cliCommandName
+        - owner
+      properties:
+        cliCommandName:
+          title: CLI Command Name
+          type: string
+          description: A short, all lowercase name
+          ui:autofocus: true
+        description:
+          title: Description
+          type: string
+          description: Description of the tool
+          ui:widget: textarea
+          ui:options:
+            rows: 5
+        owner:
+          title: Owner
+          type: string
+          description: Owner of the application
+          ui:field: OwnerPicker
+          ui:options:
+            allowedKinds:
+              - Group
+    - title: Build Information
+      properties:
+        azdoPool:
+          title: Agent Pool
+          type: string
+          description: Please select the agent pool to be used
+          default: On Premises Dynamic Pool
+          enum:
+            - On Premises Dynamic Pool
+            - On Premises Large Dynamic Pool
+            - On Premises Preview Pool
+    - title: Repo Destination
+      required:
+        - repoUrl
+      properties:
+        repoUrl:
+          title: Repository Location
+          type: string
+          ui:field: RepoUrlPicker
+          ui:options:
+            allowedHosts:
+              - dev.azure.com
+            allowedOrganizations:
+              - progcloud
+            allowedOwners:
+              - EDV
+              - InnerSource
+
+  # These steps are executed in the scaffolder backend, using data that we gathered
+  # via the parameters above.
+  steps:
+    # Each step executes an action, in this case one templates files into the working directory.
+    - id: fetch-base
+      name: Fetch Base
+      action: fetch:template
+      input:
+        url: ./template
+        values:
+          cliCommandName: ${{ parameters.cliCommandName }}
+          description: ${{ parameters.description }}
+          owner: ${{ parameters.owner }}
+          azdoPool: ${{ parameters.azdoPool }}
+          repoHost: ${{ (parameters.repoUrl | parseRepoUrl)['host'] }}
+          repoOwner: ${{ (parameters.repoUrl | parseRepoUrl)['owner'] }}
+          repoOrg: ${{ (parameters.repoUrl | parseRepoUrl)['organization'] }}
+          repoName: ${{ (parameters.repoUrl | parseRepoUrl)['repo'] }}
+          isAzdo: true
+
+    - id: publish
+      name: Publish
+      action: publish:azure
+      input:
+        repoUrl: ${{ parameters.repoUrl }}
+        description: ${{ parameters.description }}
+        defaultBranch: main
+        gitAuthorName: Backstage
+
+    - id: pipeline
+      name: Create Pipeline
+      action: azure:pipeline:create
+      input:
+        organization: ${{ (parameters.repoUrl | parseRepoUrl)['organization'] }}
+        project: ${{ (parameters.repoUrl | parseRepoUrl)['owner'] }}
+        folder: "/"
+        name: ${{ (parameters.repoUrl | parseRepoUrl)['repo'] }}
+        repositoryId: ${{ steps.publish.output.repositoryId }}
+        repositoryName: ${{ (parameters.repoUrl | parseRepoUrl)['repo'] }}
+        yamlPath: "./pipeline.yaml"
+
+    # - id: run-pipeline
+    #   name: Run Pipeline
+    #   action: azure:pipeline:run
+    #   input:
+    #     organization: ${{ (parameters.repoUrl | parseRepoUrl)['organization'] }}
+    #     pipelineId: ${{ steps.createAzurePipeline.output.pipelineId }}
+    #     project: ${{ (parameters.repoUrl | parseRepoUrl)['owner'] }}
+
+    - id: azure-vm
+      name: Create Azure VM
+      action: progressive:azure:compute:vm:create
+      input:
+        location: eastus2
+        resourceGroup: TestRG
+        name: TestingVM
+        image: Test
+        publicIpSku: notneeded
+        adminUsername: testuser
+        adminPassword: testing123
+
+    # The final step is to register our new component in the catalog.
+    - id: register
+      name: Register
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps.publish.output.repoContentsUrl }}
+        catalogInfoPath: '/catalog-info.yaml'
+
+  # Outputs are displayed to the user after a successful execution of the template.
+  output:
+    links:
+      - title: Repository
+        url: ${{ steps.publish.output.remoteUrl }}
+      - title: Pipeline
+        url: ${{ steps.createAzurePipeline.output.pipelineUrl }}
+      - title: Open in catalog
+        icon: catalog
+        entityRef: ${{ steps.register.output.entityRef }}
